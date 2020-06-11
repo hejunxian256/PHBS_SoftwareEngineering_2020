@@ -11,12 +11,13 @@ initParameters.endDate = datenum(2014, 8, 31);
 director.initialize(initParameters);
 
 % register a strategy
-PairTradingStrategy =  PairTradingStrategy(director.rootAllocator , 'group2');
-strategyParameters = mclasses.strategy.longOnly.configParameter(PairTradingStrategy);
-PairTradingStrategy.initialize(strategyParameters);
+PairTradingStrategyInstance =  PairTradingStrategy(director.rootAllocator , 'pairTradingStrategy');
+%2020/06/11沈廷威，修改了此处变量名，不能和.m文件重名
+strategyParameters = mclasses.strategy.longOnly.configParameter(PairTradingStrategyInstance);
+PairTradingStrategyInstance.initialize(strategyParameters);
 
 %% run strategies
-load('/Users/lifangwen/Desktop/module4/software/homeworkCode/sharedData/mat/marketInfo_securities_china.mat')
+%load('/Users/lifangwen/Desktop/module4/software/homeworkCode/sharedData/mat/marketInfo_securities_china.mat')
 director.reset();
 director.set_tradeDates(aggregatedDataStruct.sharedInformation.allDates);
 director.run();
