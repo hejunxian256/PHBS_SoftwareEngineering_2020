@@ -14,14 +14,14 @@ set(groot, 'defaultFigurePaperPositionMode', 'auto')
 clear mclasses;
 
 %% path variables
-rootpath = fullfile('/Users/lifangwen/Desktop/module4/software/homeworkCode');
+rootpath = fullfile('C:\Users\52658\Desktop\homeworkCode');
 addpath(fullfile(rootpath, 'sharedLibrary',  'utils'));
 addpath(genpath_exclude(rootpath, {'.git', '.ignore', 'data', 'results', 'serializedData', 'reports', 'doc', '+mclasses'}));
 
 STATICPARS = mclasses.staticParameters.StaticParameters;
 
 %% add CVX path (CAUTIOM: make sure CVX is installed OUTSIDE of the above rootpath directory)
-cvxPath = '/Users/lifangwen/Desktop/module4/cvx';
+cvxPath = 'D:\chromeFiles\cvx-w64\cvx';
 cd(cvxPath)
 % cvx_setup 'D:\courses\software engineering\2019.M4.SoftwareEngineering\cvxlicense\cvx_license.dat'
 cvx_setup 

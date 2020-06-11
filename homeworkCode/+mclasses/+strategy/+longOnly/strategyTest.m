@@ -16,7 +16,7 @@ strategyParameters = mclasses.strategy.longOnly.configParameter(longOnlyStrategy
 longOnlyStrategy.initialize(strategyParameters);
 
 %% run strategies
-load('/Users/lifangwen/Desktop/module4/software/homeworkCode/sharedData/mat/marketInfo_securities_china.mat')
+%load('/Users/lifangwen/Desktop/module4/software/homeworkCode/sharedData/mat/marketInfo_securities_china.mat')
 director.reset();
 director.set_tradeDates(aggregatedDataStruct.sharedInformation.allDates);
 director.run();
