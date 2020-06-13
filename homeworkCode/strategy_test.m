@@ -7,7 +7,7 @@ director = mclasses.director.HomeworkDirector([], 'homework_1');
 % parameters for director
 directorParameters = [];
 initParameters.startDate = datenum(2014, 5, 1);
-initParameters.endDate = datenum(2014, 8, 31);
+initParameters.endDate = datenum(2014, 6, 1);
 director.initialize(initParameters);
 
 % register a strategy
@@ -21,3 +21,4 @@ PairTradingStrategyInstance.initialize(strategyParameters);
 director.reset();
 director.set_tradeDates(aggregatedDataStruct.sharedInformation.allDates);
 director.run();
+director.displayResult();

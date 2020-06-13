@@ -40,9 +40,8 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             obj.autoupdateCurrPairListPnL(currDate);
             [cashAvailable, buyOrderList1, sellOrderList1] = obj.examCurrPairList(currDate);
             [buyOrderList2,sellOrderList2] = obj.updateCurrPairList(currDate,cashAvailable);
-            orderList = [orderList,sellOrderList1];
-            orderList = [orderList,buyOrderList1]
-            delayList = [delayList, 1];
+            orderList = [orderList,sellOrderList1,sellOrderList2,buyOrderList1,buyOrderList2];
+            delayList = [delayList, 1,1,1,1];
         end
         
         

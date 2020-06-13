@@ -8,7 +8,7 @@ parameter.initCapital = initialCapital;
 parameter.orderPriceType = 'close';
 
 account = mclasses.account.StockAccount(strategy, 'stockAccount');
-account.initialize(parameter.initCapital );
+account.initialize(parameter.initCapital);
 accounts = {account};
 
 end
