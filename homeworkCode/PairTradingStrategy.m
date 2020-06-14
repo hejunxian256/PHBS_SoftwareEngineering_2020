@@ -34,19 +34,26 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             delayList = [];
             if not(obj.signalInitialized)
                obj.signals = PairTradingSignal(currDate);
+               obj.signals.initializeHistory;
                obj.signalInitialized =1;
             end
-            
+            obj.signals.generateSignals(currDate);
             obj.autoupdateCurrPairListPnL(currDate);
             [cashAvailable, buyOrderList1, sellOrderList1] = obj.examCurrPairList(currDate);
             [buyOrderList2,sellOrderList2] = obj.updateCurrPairList(currDate,cashAvailable);
-            orderList = [orderList,sellOrderList1,sellOrderList2,buyOrderList1,buyOrderList2];
-            delayList = [delayList, 1,1,1,1];
+            order = {sellOrderList1,sellOrderList2,buyOrderList1,buyOrderList2} ;
+            for i =1:4
+                if ~isempty(order{i}.assetCode)
+                    orderList=[orderList, order{i}];
+                end
+            end
+            [~,orderCount] = size(orderList);
+            delayList = ones(1,orderCount);
         end
         
         
         % close the position while certain loss is beyond the level or the pairs back to the mean.
-        function [cashAvailable, buyOrderList, sellOrderList] = examCurrPairList(obj,currDate)
+       function [cashAvailable, buyOrderList, sellOrderList] = examCurrPairList(obj,currDate)
             aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
             dateLoc = find( [obj.signals.dateList{:,1}]== currDate );
             cashAvailable = obj.getCashAvailable('stockAccount');
@@ -156,41 +163,40 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
             %因为没有通过检验pair对应的结果都是0，这里我们用每个pair的validity，乘是否zscore大于2的逻辑判断，乘下三角矩阵（因为一个pair其实有两个组合），得到符合标准的交易pair，
             %然后这个矩阵乘以expectReturn，得到满足交易标准的pair的expectReturn
-            avaliableExpect = currentVal.*currentExpect.*(currentZscore>2||currentZscore<-2).*tril(currentExpect);
+            avaliableExpect = currentVal.*currentExpect.*((currentZscore>1.2)+(currentZscore<-1.2));%.*tril(currentExpect);
             longwindTicker={};
             longQuant = [];
             shortwindTicker = {};
             shortQuant = [];
             %这部分的算法思想是从大到小找avaliableExpect中最大的10个，和currPairList进行比较看是否加入。每次都找最大的一个，比较计算完成后，把他的expectreturn变成0，防止下次再次被选到。
             for i= 1:10
-                [maxDatatool,xtool] = max(avaliableExpect);
-                x = xtool(1);
-                [maxData,y] = max(maxDatatool); %x,y是对应的最大expectReturn的pair
+                maxData = max(max(avaliableExpect)); 
+                [x,y] = find(avaliableExpect== maxData);%x,y是对应的最大expectReturn的pair
                 % 沈廷威2020/06/04:你这里每次循环拿到的x,y是同一个吧，有点奇怪
                 % 李方闻2020/06/06:已经修改，之前忘了把找过的pair的expectreturn转化为零，已修改
                 if maxData>0
-                    stock1 = x;
-                    stoock2 = y;
+                    stock1 = obj.signals.stockLocation(x);
+                    stock2 =obj.signals.stockLocation(y);
 
                     %这里目前并不是真的头寸，只是保存了根据zscore判断的买卖方向，zscore大于2，做空，zscore小于-2，做多
-                    stock1Position = -obj.signals.signalParameters(x,y,zscoreIndex,end,1,1)/abs(obj.signals.signalParameters(x,y,zscoreIndex,end,1,1));
-                    stock2Position = obj.signals.signalParameters(x,y,betaIndex,end,1,1)*...
-                        obj.signals.signalParameters(x,y,zscoreIndex,end,1,1)/abs(obj.signals.signalParameters(x,y,zscoreIndex,end,1,1)); 
+                    stock1Position = -obj.signals.signalParameters(x,y,end,1,1,zscoreIndex)/abs(obj.signals.signalParameters(x,y,end,1,1,zscoreIndex));
+                    stock2Position = obj.signals.signalParameters(x,y,end,1,1,betaIndex)*...
+                        obj.signals.signalParameters(x,y,end,1,1,zscoreIndex)/abs(obj.signals.signalParameters(x,y,end,1,1,zscoreIndex)); 
 
                     openCost = 0;%这里先不计算，之后再计算
-                    openZScore = obj.signals.signalParameters(x,y,zscoreIndex,end,1,1);
+                    openZScore = obj.signals.signalParameters(x,y,end,1,1,zscoreIndex);
                     PnL = 0;
                     openDate = currDate+1;%第二天开盘开仓
-                    beta = obj.signals.signalParameters(x,y,betaIndex,end,1,1);
+                    beta = obj.signals.signalParameters(x,y,end,1,1,betaIndex);
 
-                    newStruct = struct('stock1',stock1,'stoock2',stoock2,'stock1Position',stock1Position,'stock2Position',...
+                    newStruct = struct('stock1',stock1,'stock2',stock2,'stock1Position',stock1Position,'stock2Position',...
                     stock2Position,'openCost',openCost,'openZScore',openZScore,'PnL',PnL,'openDate',openDate,'expectReturn',maxData,'beta',beta);
                     obj.orderSort();%先排序，再比较，expectReturn从小到大排列
                     % 沈廷威2020/06/04:这个语法不太对啊，orderSort()只能由这个类的对象来调用，不能用currPairList直接调用，他就是一个成员变量，一个cell，应该是obj.orderSort()吧
                     % 李方闻2020/06/06:已经按照提示修改
 
-                    if (length(currPairList)<10)%如果currPairList长度小于10，直接开仓购买组合
-                        [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.openPair(newStruct,longwindTicker,longQuant,shortwindTicker,shortQuant);
+                    if (length(obj.currPairList)<10)%如果currPairList长度小于10，直接开仓购买组合
+                        [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.openPair(newStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable);
 
                     else
                         if newStruct.expectReturn > obj.currPairList{1,1}.expectReturn %如果新的组合expectReturn更高，则替换pair
@@ -199,9 +205,9 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                             % 沈廷威2020/06/04:这块逻辑是不是有点问题，你下次obj.currPairList{1,1}就是你最新加入的pair了
                             % 李方闻2020/06/05:那你一直在同一个位置比较啊，参与后续比较的全是新增的pair，没有老pair了
                             % 李方闻2020/06/06:这里我每次在比较之前都进行了排序，保证最小的在第一个）
-                       end
-                    avaliableExpect(x,y) = 0;%把已经比较过的最大值赋值为0，防止下次再次选到
+                        end               
                     end    
+                    avaliableExpect(x,y) = 0;%把已经比较过的最大值赋值为0，防止下次再次选到
                 else
                     break;
                 end
@@ -223,14 +229,16 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
         function orderSort(obj)
             len = length(obj.currPairList);
-            for i = 1:len
-                for j =1:len-i+1
-                    if obj.currPairList{1,j}.expectReturn > obj.currPairList{1,j+1}.expectReturn
-                         % 沈廷威2020/06/04:你这边是想做冒泡排序吧，但是我不是很明白currPairList{1,j}调用的是啥，按照设计，应该只需要一个下标可以了
-                         % 李方闻2020/06/06:系统默认是一维向量，这里用一个和两个都一样，习惯用两个
-                        tools = obj.currPairList{1,j+1};
-                        obj.currPairList{1,j+1} = obj.currPairList{1,j};
-                        obj.currPairList{1,j} = tools;
+            if len>2
+                for i = 1:len
+                    for j =1:len-1
+                        if obj.currPairList{1,j}.expectReturn > obj.currPairList{1,j+1}.expectReturn
+                             % 沈廷威2020/06/04:你这边是想做冒泡排序吧，但是我不是很明白currPairList{1,j}调用的是啥，按照设计，应该只需要一个下标可以了
+                             % 李方闻2020/06/06:系统默认是一维向量，这里用一个和两个都一样，习惯用两个
+                            tools = obj.currPairList{1,j+1};
+                            obj.currPairList{1,j+1} = obj.currPairList{1,j};
+                            obj.currPairList{1,j} = tools;
+                        end
                     end
                 end
             end
@@ -238,7 +246,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
 
         function  [longwindTicker,longQuant,shortwindTicker,shortQuant] = openPair(obj,newStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable)
-
+            aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
             [~, dateLoc] = ismember(currDate, aggregatedDataStruct.sharedInformation.allDates);
             windTickers1 = aggregatedDataStruct.stock.description.tickers.windTicker(newStruct.stock1);
             windTickers2 = aggregatedDataStruct.stock.description.tickers.windTicker(newStruct.stock2);%wind股票代码
@@ -251,7 +259,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             % 沈廷威2020/06/04:这一步别这么干，算是调用未来数据了。还是close(dateLoc，newStruct.stock2)吧 
             % 李方闻2020/06/06:已经修改
 
-            everyCash = 0.85*cashAvailable/(10-length(currPairList));%每份投资可用资金
+            everyCash = 0.85*cashAvailable/(10-length(obj.currPairList));%每份投资可用资金
             cashFor1 = (1*fwdPrice1)/(1*fwdPrice1+abs(newStruct.beta)*fwdPrice2)*everyCash;%计算出资金分配
             cashFor2 = (abs(newStruct.beta)*fwdPrice2)/(1*fwdPrice1+abs(newStruct.beta)*fwdPrice2)*everyCash;
 
@@ -293,13 +301,13 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
             end
 
-            obj.currPairList{1,length(currPairList)+1} = newStruct;
+            obj.currPairList{1,length(obj.currPairList)+1} = newStruct;
         end
 
 
 
         function  [longwindTicker,longQuant,shortwindTicker,shortQuant,cashAvailable] = closePair(obj,closeStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable)
-
+             aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
              [~, dateLoc] = ismember(currDate, aggregatedDataStruct.sharedInformation.allDates);
             if closeStruct.Pnl>closeStruct.opencost
                 obj.winCounter= obj.winCounter+1;
