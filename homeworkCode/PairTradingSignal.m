@@ -1,14 +1,3 @@
-
-%PairTradingSignal部分由李佳辉，蒋英杰共同开发
-%fields,initializeHistory, calculateParameters, generaterSignals 三个方法及部分构造函数的实现由李佳辉负责
-%部分构造函数的实现（stockUniverse与dateList初始化）由蒋英杰负责
-%code review: 沈廷威，何隽贤
-
-% Writer : Li Jiahui, Jiang Yingjie 
-% Date: 2020/06/06
-% 第三次修改后结果
-
-
 classdef PairTradingSignal < handle
     
     properties(Access = public)
@@ -20,6 +9,7 @@ classdef PairTradingSignal < handle
         forwardPrices = [];
         wr = 100;
         ws = 30;
+        stockLocation;
         stockNum = 42;
         %sigalParameters has six dimensions:stock1,stock2,dateLocation,wr,ws and properties
         %dateLocation is the location of date in dateList
@@ -39,6 +29,7 @@ classdef PairTradingSignal < handle
             generalData = marketData.getAggregatedDataStruct;
             stockSectorFilter = generalData.stock.sectorClassification.levelOne == 4;
             stockLocation = find(sum(stockSectorFilter) > 1);
+            obj.stockLocation = stockLocation;
             obj.forwardPrices = generalData.stock.properties.fwd_close(:, stockLocation);
             %store actual stock name and code into stockUniverse
             code=generalData.stock.description.tickers.officialTicker(stockLocation);
