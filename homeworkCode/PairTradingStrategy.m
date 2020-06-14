@@ -84,18 +84,18 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                     windTickers2 = aggregatedDataStruct.stock.description.tickers.windTicker(stock2);
                     
                     if obj.currPairList{1,i}.stock1Position<0
-                        longwindTicker{length(longwindTicker)+1,1} = windTickers1;
+                        longwindTicker{length(longwindTicker)+1} = windTickers1{1};
                         longQuant = [longQuant,0];%平仓时把目标仓位设定为0
                     else
-                        shortwindTicker{length(shortwindTicker)+1,1} = windTickers1;
+                        shortwindTicker{length(shortwindTicker)+1,1} = windTickers1{1};
                         shortQuant = [shortQuant,0];
                     end
 
                     if obj.currPairList{1,i}.stock2Position<0
-                        longwindTicker{length(longwindTicker)+1,1} = windTickers2;
+                        longwindTicker{length(longwindTicker)+1} = windTickers2{1};
                         longQuant = [longQuant,0];
                     else
-                        shortwindTicker{length(shortwindTicker)+1,1} = windTickers2;
+                        shortwindTicker{length(shortwindTicker)+1} = windTickers2{1};
                         shortQuant = [shortQuant,0];
                     end        
                     cashAvailable = cashAvailable+abs(obj.currPairList{1,i}.stock1Position*stockPrice1)*(1-2/10000)+abs(obj.currPairList{1,i}.stock2Position*stockPrice2)*(1-2/10000); 
@@ -284,19 +284,19 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
 
             if newStruct.stock1Position>0
-                longwindTicker{length(longwindTicker)+1,1} = windTickers1;
+                longwindTicker{length(longwindTicker)+1} = windTickers1{1};
                 longQuant = [longQuant,newStruct.stock1Position];
             else
-                shortwindTicker{length(shortwindTicker)+1,1} = windTickers1;
+                shortwindTicker{length(shortwindTicker)+1} = windTickers1{1};
                 shortQuant = [shortQuant,-newStruct.stock1Position]; %这里都要保存成正数
 
             end
 
             if newStruct.stock2Position>0
-                longwindTicker{length(longwindTicker)+1,1} = windTickers2;
+                longwindTicker{length(longwindTicker)+1} = windTickers2{1};
                 longQuant = [longQuant,newStruct.stock2Position];
             else
-                shortwindTicker{length(shortwindTicker)+1,1} = windTickers2;
+                shortwindTicker{length(shortwindTicker)+1} = windTickers2{1};
                 shortQuant = [shortQuant,-newStruct.stock2Position];
 
             end
@@ -332,18 +332,18 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             obj.currPairList = obj.currPairList{2:end} ; %删除第一个
 
             if closeStruct.stock1Position<0
-                longwindTicker{length(longwindTicker)+1,1} = windTickers1;
+                longwindTicker{length(longwindTicker)+1} = windTickers1{1};
                 longQuant = [longQuant,0];%平仓时把目标仓位设定为0
             else
-                shortwindTicker{length(shortwindTicker)+1,1} = windTickers1;
+                shortwindTicker{length(shortwindTicker)+1} = windTickers1{1};
                 shortQuant = [shortQuant,0];
             end
 
             if closeStruct.stock2Position<0
-                longwindTicker{length(longwindTicker)+1,1} = windTickers2;
+                longwindTicker{length(longwindTicker)+1} = windTickers2{1};
                 longQuant = [longQuant,0];
             else
-                shortwindTicker{length(shortwindTicker)+1,1} = windTickers2;
+                shortwindTicker{length(shortwindTicker)+1} = windTickers2{1};
                 shortQuant = [shortQuant,0];
             end
         end
