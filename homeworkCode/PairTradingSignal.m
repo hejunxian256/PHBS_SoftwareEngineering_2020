@@ -116,12 +116,15 @@ classdef PairTradingSignal < handle
                     alphaNaNNum = sum(isnan(obj.regressionAlphaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation)));
                     betaNaNNum = sum(isnan(obj.regressionBetaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation)));
                     %if there are NaNs in regression history, then this pair is not valid and set all the parameters 0.
-                    if alphaNaNNum+betaNaNNum >= 1
+                    stockPrice1 = obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock1);
+                    stockPrice2 = obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock2);
+                    %if stock prices don't change in the past ws days, then this pair is not valid.
+                    if alphaNaNNum+betaNaNNum >= 1 || max(stockPrice1)-min(stockPrice1) == 0 || max(stockPrice2)-min(stockPrice2) == 0
                         obj.signalParameters(stock1,stock2,dateLocation,1,1,:) = zeros(8,1);
                     else
                         averageAlpha = mean(obj.regressionAlphaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation));
                         averageBeta = mean(obj.regressionBetaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation));
-                        residual = obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock1) - averageAlpha - averageBeta*obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock2);
+                        residual = stockPrice1 - averageAlpha - averageBeta*stockPrice2;
                         validity = adftest(residual);
                         %if residual series is staionary, then calculate and store parameters 
                         if validity == 1
