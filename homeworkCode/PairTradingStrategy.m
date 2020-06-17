@@ -1,4 +1,4 @@
-
+%%
 %PairTradingStrategy部分由李方闻，宗艳洁共同开发
 %宗艳洁负责fields与constructor,generateOrders,examCurrPairList以及autoupdateCurrPairListPnL方法的编写
 %李方闻负责updateCurrPairList,orderSort,openPair与closePair 方法的编写
