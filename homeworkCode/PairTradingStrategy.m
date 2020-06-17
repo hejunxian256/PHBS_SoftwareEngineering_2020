@@ -34,22 +34,24 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             orderList = [];
             delayList = [];
             if not(obj.signalInitialized)
-               obj.signals = PairTradingSignal(currDate);
+               obj.signals = PairTradingSignal(currDate);%currDate=735722
                obj.signals.initializeHistory;
                obj.signalInitialized =1;
             end
+
             obj.signals.generateSignals(currDate);
             obj.autoupdateCurrPairListPnL(currDate);
             [cashAvailable, buyOrderList1, sellOrderList1] = obj.examCurrPairList(currDate);
             [buyOrderList2,sellOrderList2] = obj.updateCurrPairList(currDate,cashAvailable);
             order = {sellOrderList1,sellOrderList2,buyOrderList1,buyOrderList2} ;
             for i =1:4
-                if ~isempty(order{i}.assetCode)
-                    orderList=[orderList, order{i}];
+               if ~isempty(order{i}.assetCode)
+                   orderList=[orderList, order{i}];
                 end
             end
             [~,orderCount] = size(orderList);
             delayList = ones(1,orderCount);
+            
         end
         
         
@@ -101,9 +103,8 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                     end        
                     cashAvailable = cashAvailable+abs(obj.currPairList{1,i}.stock1Position*stockPrice1)*(1-2/10000)+abs(obj.currPairList{1,i}.stock2Position*stockPrice2)*(1-2/10000); 
                else
-                    newList{1,length(newList)+1} =  obj.currPairList{1,i};
-               end
-                   
+               newList{1,length(newList)+1} =  obj.currPairList{1,i};
+               end            
            end
            obj.currPairList=newList;   
             buyOrderList.operate = mclasses.asset.BaseAsset.ADJUST_LONG;
@@ -119,7 +120,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             sellOrderList.quantity = shortQuant;           
         end
         
-        % update the PnL of each stock pair portfolio in CurrPairList, 
+        %% update the PnL of each stock pair portfolio in CurrPairList, 
         % It compare the price and position between the currDate and the OpenDate.
         function currPairList = autoupdateCurrPairListPnL(obj,currDate)
             aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
@@ -132,7 +133,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                 stockPrice2 = aggregatedDataStruct.stock.properties.close(dateLoc, stock2);
                 originPrice1 = aggregatedDataStruct.stock.properties.close(opendateLoc, stock1);
                 originPrice2 = aggregatedDataStruct.stock.properties.close(opendateLoc, stock2);
-                obj.currPairList{1,i}.PnL=(stockPrice1-originPrice1)*obj.currPairList{1,i}.stock1Position+(stockPrice2-originPrice2)*obj.currPairList{1,i}.stock2Position/(abs(originPrice1*obj.currPairList{1,i}.stock1Position)+abs(originPrice2*obj.currPairList{1,i}.stock2Position));
+                obj.currPairList{1,i}.PnL=((stockPrice1-originPrice1)*obj.currPairList{1,i}.stock1Position+(stockPrice2-originPrice2)*obj.currPairList{1,i}.stock2Position)/(abs(originPrice1*obj.currPairList{1,i}.stock1Position)+abs(originPrice2*obj.currPairList{1,i}.stock2Position));
             end
             
         end  
@@ -147,6 +148,9 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
         %%
 
         function  [buyOrderList,sellOrderList] = updateCurrPairList(obj,currDate,cashAvailable)
+             if currDate==735722
+                tt=1;
+            end
 
             %aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
             % [~, dateLoc] = ismember(currDate, aggregatedDataStruct.sharedInformation.allDates);
@@ -167,7 +171,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
             %因为没有通过检验pair对应的结果都是0，这里我们用每个pair的validity，乘是否zscore大于2的逻辑判断，乘下三角矩阵（因为一个pair其实有两个组合），得到符合标准的交易pair，
             %然后这个矩阵乘以expectReturn，得到满足交易标准的pair的expectReturn
-            avaliableExpect = currentVal.*currentExpect.*((currentZscore>1.2)+(currentZscore<-1.2));%.*tril(currentExpect);
+            avaliableExpect = currentVal.*currentExpect.*((currentZscore>2)+(currentZscore<-2));%.*tril(currentExpect);%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             longwindTicker={};
             longQuant = [];
             shortwindTicker = {};
@@ -187,13 +191,13 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
                     %这里目前并不是真的头寸，只是保存了根据zscore判断的买卖方向，zscore大于2，做空，zscore小于-2，做多
                     stock1Position = -obj.signals.signalParameters(x,y,end,1,1,zscoreIndex)/abs(obj.signals.signalParameters(x,y,end,1,1,zscoreIndex));
-                    stock2Position = obj.signals.signalParameters(x,y,end,1,1,betaIndex)*...
+                    stock2Position = obj.signals.signalParameters(x,y,end,1,1,betaIndex)/abs(obj.signals.signalParameters(x,y,end,1,1,betaIndex))*...
                         obj.signals.signalParameters(x,y,end,1,1,zscoreIndex)/abs(obj.signals.signalParameters(x,y,end,1,1,zscoreIndex)); 
 
                     openCost = 0;%这里先不计算，之后再计算
                     openZScore = obj.signals.signalParameters(x,y,end,1,1,zscoreIndex);
                     PnL = 0;
-                    openDate = currDate+1;%第二天开盘开仓
+                    openDate = obj.signals.dateList{dateLoc+1,1};%第二天开盘开仓
                     beta = obj.signals.signalParameters(x,y,end,1,1,betaIndex);
 
                     newStruct = struct('stock1',stock1,'stock2',stock2,'stock1Position',stock1Position,'stock2Position',...
@@ -202,13 +206,14 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                     % 沈廷威2020/06/04:这个语法不太对啊，orderSort()只能由这个类的对象来调用，不能用currPairList直接调用，他就是一个成员变量，一个cell，应该是obj.orderSort()吧
                     % 李方闻2020/06/06:已经按照提示修改
                     
-                    if listLongth <10
-                        waitLong{1,length(waitLong)+1} = newStruct;
+                    if listLongth <10%如果currPairList长度小于10，直接开仓购买组合
+                        waitLong{1,length(waitLong)+1} = newStruct;%用来存放将要open的pair，这里只是记下，还没有开
                         listLongth = listLongth +1;
                     else
                         if newStruct.expectReturn > obj.currPairList{1,1}.expectReturn
-                            [longwindTicker,longQuant,shortwindTicker,shortQuant,cashAvailable] = obj.closePair(obj.currPairList{1,1},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable);
-                            waitLong{1,length(waitLong)+1} = newStruct;
+                            [longwindTicker,longQuant,shortwindTicker,shortQuant,cashAvailable] = obj.closePair(obj.currPairList{1,1},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable);%这里现金增加了
+                            waitLong{1,length(waitLong)+1} = newStruct;%用来存放将要open的pair
+                            %因为这个时候listlongth=10，不需要增加listLongth,仅仅是替换
                         end
                     end
                     avaliableExpect(x,y) = 0;%把已经比较过的最大值赋值为0，防止下次再次选到
@@ -216,33 +221,14 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                     break;
                 end
             end
-            everyCash = 0.6*cashAvailable/(length(waitLong)+10-listLongth);%每份投资可用资金%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            % 这个时候currPair里面把需要close的pair都close了，但是需要open的pair还没有加入
+           % everyCash = 0.7*cashAvailable/(10-length(obj.currPairList));%每份投资可用资金%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            everyCash = 0.7*obj.calNetWorth(currDate)/10;
             
             for i = 1:length(waitLong)
-                 [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.openPair(waitLong{1,i},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,everyCash);
+                 [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.openPair(waitLong{1,i},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,everyCash);%开仓操作
             end
                    
-%                     if (length(obj.currPairList)<10)%如果currPairList长度小于10，直接开仓购买组合
-%                         everyCash = 0.65*cashAvailable/(10-length(obj.currPairList));%每份投资可用资金
-%                         cashAvailable = cashAvailable-cashAvailable/(10-length(obj.currPairList));
-%                         [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.openPair(newStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,everyCash);
-% 
-%                     else
-%                         if newStruct.expectReturn > obj.currPairList{1,1}.expectReturn %如果新的组合expectReturn更高，则替换pair
-%                             [longwindTicker,longQuant,shortwindTicker,shortQuant,cashAvailable] = obj.closePair(obj.currPairList{1,1},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable);
-%                             everyCash = 0.65*cashAvailable/(10-length(obj.currPairList));%每份投资可用资金
-%                             cashAvailable = cashAvailable-cashAvailable/(10-length(obj.currPairList));
-%                             [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.openPair(newStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,everyCash);
-%                             % 沈廷威2020/06/04:这块逻辑是不是有点问题，你下次obj.currPairList{1,1}就是你最新加入的pair了
-%                             % 李方闻2020/06/05:那你一直在同一个位置比较啊，参与后续比较的全是新增的pair，没有老pair了
-%                             % 李方闻2020/06/06:这里我每次在比较之前都进行了排序，保证最小的在第一个）
-%                         end               
-%                     end    
-%                     avaliableExpect(x,y) = 0;%把已经比较过的最大值赋值为0，防止下次再次选到
-%                 else
-%                     break;
-%                 end
-%           end
             buyOrderList.operate = mclasses.asset.BaseAsset.ADJUST_LONG;
             buyOrderList.account = obj.accounts('stockAccount');
             buyOrderList.price = obj.orderPriceType;
@@ -277,7 +263,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 %%
         function  [longwindTicker,longQuant,shortwindTicker,shortQuant] = openPair(obj,newStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,everyCash)
             aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
-            [~, dateLoc] = ismember(currDate, aggregatedDataStruct.sharedInformation.allDates);
+            dateLoc = find( [obj.signals.dateList{:,1}]== currDate );
             windTickers1 = aggregatedDataStruct.stock.description.tickers.windTicker(newStruct.stock1);
             windTickers2 = aggregatedDataStruct.stock.description.tickers.windTicker(newStruct.stock2);%wind股票代码
 
@@ -289,7 +275,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             % 沈廷威2020/06/04:这一步别这么干，算是调用未来数据了。还是close(dateLoc，newStruct.stock2)吧 
             % 李方闻2020/06/06:已经修改
 
-            cashFor1 = (1*fwdPrice1)/(1*fwdPrice1+abs(newStruct.beta)*fwdPrice2)*everyCash;%计算出资金分配
+            cashFor1 = (1*fwdPrice1)/(1*fwdPrice1+abs(newStruct.beta)*fwdPrice2)*everyCash;%计算出资金分配,比例为1：beta
             cashFor2 = (abs(newStruct.beta)*fwdPrice2)/(1*fwdPrice1+abs(newStruct.beta)*fwdPrice2)*everyCash;
 
             costPrice1 = aggregatedDataStruct.stock.properties.open(dateLoc+1, newStruct.stock1);
@@ -314,7 +300,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
             if newStruct.stock1Position>0
                 longwindTicker{length(longwindTicker)+1} = windTickers1{1};
-                longQuant = [longQuant,newStruct.stock1Position];
+                longQuant = [longQuant, newStruct.stock1Position];
             else
                 shortwindTicker{length(shortwindTicker)+1} = windTickers1{1};
                 shortQuant = [shortQuant,-newStruct.stock1Position]; %这里都要保存成正数
@@ -323,7 +309,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
             if newStruct.stock2Position>0
                 longwindTicker{length(longwindTicker)+1} = windTickers2{1};
-                longQuant = [longQuant,newStruct.stock2Position];
+                longQuant = [longQuant, newStruct.stock2Position];
             else
                 shortwindTicker{length(shortwindTicker)+1} = windTickers2{1};
                 shortQuant = [shortQuant,-newStruct.stock2Position];
@@ -336,6 +322,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
 
 %%
         function  [longwindTicker,longQuant,shortwindTicker,shortQuant,cashAvailable] = closePair(obj,closeStruct,longwindTicker,longQuant,shortwindTicker,shortQuant,currDate,cashAvailable)
+             opendateLoc = find([obj.signals.dateList{:,1}]== closeStruct.openDate) ;%开仓时间
              aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
              [~, dateLoc] = ismember(currDate, aggregatedDataStruct.sharedInformation.allDates);
             if closeStruct.PnL>closeStruct.openCost
@@ -349,12 +336,18 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             windTickers1 = aggregatedDataStruct.stock.description.tickers.windTicker(closeStruct.stock1);
             windTickers2 = aggregatedDataStruct.stock.description.tickers.windTicker(closeStruct.stock2);%得到wind股票代码
 
-
-            realPrice1 = aggregatedDataStruct.stock.properties.close(dateLoc, closeStruct.stock1);
+            if  closeStruct.stock1Position<0 %如果原来是空头，平仓时候价格按照开仓价格算
+                realPrice1=aggregatedDataStruct.stock.properties.open(opendateLoc, closeStruct.stock1);
+            else
+                realPrice1 = aggregatedDataStruct.stock.properties.close(dateLoc, closeStruct.stock1);%否则用当前价格计算平仓价格
+            end
             % 沈廷威2020/06/05: dataLoc非成员变量，无法直接访问，请传参或者新增成员变量。
             % 李方闻2020/06/06: 已经修改
-            realPrice2 = aggregatedDataStruct.stock.properties.close(dateLoc, closeStruct.stock2);%真实价格用来计算卖出现金
-
+            if  closeStruct.stock2Position<0 %如果原来是空头，平仓时候价格按照开仓价格算
+                realPrice2=aggregatedDataStruct.stock.properties.open(opendateLoc, closeStruct.stock2);
+            else
+                 realPrice2 = aggregatedDataStruct.stock.properties.close(dateLoc, closeStruct.stock2);%真实价格用来计算卖出现金
+            end
             cashAvailable = cashAvailable+(abs(closeStruct.stock1Position)*realPrice1+abs(closeStruct.stock2Position)*realPrice2)*(1-2/10000);%增加可用现金
             % 沈廷威2020/06/04:这部分涉及到未来数据，并作为交易指导，不允许
             % 李方闻2020/06/06:已经修改
