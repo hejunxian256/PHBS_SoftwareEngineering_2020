@@ -6,8 +6,8 @@ director = mclasses.director.HomeworkDirector([], 'homework_1');
 %% register strategy
 % parameters for director
 directorParameters = [];
-initParameters.startDate = datenum(2014, 5, 15);
-initParameters.endDate = datenum(2015, 5, 21);
+initParameters.startDate = datenum(2017, 1, 1);
+initParameters.endDate = datenum(2020,2 , 2);
 director.initialize(initParameters);
 
 % register a strategy
