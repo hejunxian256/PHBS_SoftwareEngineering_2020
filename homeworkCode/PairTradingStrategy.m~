@@ -78,7 +78,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             [~,orderCount] = size(orderList);
             delayList = ones(1,orderCount);
             obj.cutLossRecord = obj.cutLossRecord-1;
-            if (currDate==datenum(2020, 2,1 ))
+            if (currDate==datenum(2017, 4,27 ))
                 xlswrite('winCounter.xls',obj.winCounter);
                 xlswrite('lossCounter.xls',obj.lossCounter);
                 xlswrite('cutLossCounter.xls',obj.cutLossCounter);
@@ -207,16 +207,15 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             zscoreIndex = find(ismember(obj.signals.propertyNameList, 'zScore'));
             betaIndex = find(ismember(obj.signals.propertyNameList, 'beta'));
             alphaIndex = find(ismember(obj.signals.propertyNameList, 'alpha'));
-            openIndex =  find(ismember(obj.signals.propertyNameList, 'open'));
-            
+            o
             % 分别找到不同pair 对应的expectedReturn，validity，zscore，返回的结果都是的二维矩阵
             currentExpect = obj.signals.signalParameters(:,:,end,1,1,returnIndex);
-            currentVal = obj.signals.signalParameters(:,:,end,1,1,validityIndex);    
-            currentOpen =  obj.signals.signalParameters(:,:,end,1,1,openIndex);
-            
+            currentVal = obj.signals.signalParameters(:,:,end,1,1,validityIndex);
+            currentZscore =  obj.signals.signalParameters(:,:,end,1,1,zscoreIndex);     
+ 
             %因为没有通过检验pair对应的结果都是0，这里我们用每个pair的validity，乘是否zscore大于2的逻辑判断，得到符合标准的交易pair，
             %然后这个矩阵乘以expectReturn，得到满足交易标准的pair的expectReturn
-            avaliableExpect = currentVal.*currentExpect.*currentOpen.*(~obj.existPair ).*(obj.cutLossRecord<0);%.*tril(currentExpect);%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            avaliableExpect = currentVal.*currentExpect.*((currentZscore>2)+(currentZscore<-2)).*(~obj.existPair ).*(obj.cutLossRecord<0);%.*tril(currentExpect);%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             longwindTicker={};
             longQuant = [];
             shortwindTicker = {};
