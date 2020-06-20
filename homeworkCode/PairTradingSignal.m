@@ -1,3 +1,4 @@
+%在propertylist里，第六个变为sigma，方便调用；加入第九个变量open，判定是否到达开仓条件
 classdef PairTradingSignal < handle
     
     properties(Access = public)
@@ -7,15 +8,15 @@ classdef PairTradingSignal < handle
         regressionBetaHistory = [];
         regressionAlphaHistory = [];
         forwardPrices = [];
-        wr = 100;
-        ws = 30;
+        wr = 20;
+        ws = 12;
         stockLocation;
         stockNum = 42;
         %sigalParameters has six dimensions:stock1,stock2,dateLocation,wr,ws and properties
         %dateLocation is the location of date in dateList
         %properties have right parameters listed in propertyParameters
-        signalParameters = zeros(1,1,1,1,1,8)
-        propertyNameList =  {'validity','zScore','dislocation','expectedReturn','halfLife','entryPointBoundary','alpha','beta'};
+        signalParameters = zeros(1,1,1,1,1,9)
+        propertyNameList =  {'validity','zScore','dislocation','expectedReturn','halfLife','sigma','alpha','beta','open'};
         stockUniverse;
         %dateList is 2210*2 cell; the first column is date code, the second column is actual date
         dateList;
@@ -57,8 +58,10 @@ classdef PairTradingSignal < handle
                         %count the number of NaN in Y and X
                         YNaNNum = sum(isnan(Y));
                         XNaNNum = sum(isnan(X));
-                        %if there are NaNs in Y and X or prices of stock1 or stock2 didn't change over time, fill NaN into regression history
-                        if YNaNNum+XNaNNum >= 1 || max(Y)-min(Y) == 0 || max(X)-min(X) == 0
+                        Y_stat = tabulate(Y);
+                        X_stat = tabulate(X);
+                        %if there are NaNs in Y and X or prices of stock1 or stock2 didn't change for more than 20% time period, fill NaN into regression history
+                        if YNaNNum+XNaNNum >= 1 || max(Y_stat(:,3)) > 20|| max(X_stat(:,3)) > 20
                             obj.regressionAlphaHistory(stock1,stock2,dateLocation) = NaN;
                             obj.regressionBetaHistory(stock1,stock2,dateLocation) = NaN;
                         else
@@ -75,7 +78,7 @@ classdef PairTradingSignal < handle
         function obj = calculateParameters(obj,stock1,stock2,dateCode,alpha,beta,residual)
             dateLocation = find(cell2mat(obj.dateList(:,1)) == dateCode);
             %calculate dislocation
-            dislocation = obj.forwardPrices(dateLocation,stock1)-beta*obj.forwardPrices(dateLocation,stock2) - alpha;
+            dislocation = abs(obj.forwardPrices(dateLocation,stock1)-beta*obj.forwardPrices(dateLocation,stock2) - alpha);
             obj.signalParameters(stock1,stock2,dateLocation,1,1,3) = dislocation;
             %calculate z-score
             zScore = dislocation/std(residual);
@@ -84,16 +87,37 @@ classdef PairTradingSignal < handle
             Y = residual(2:obj.ws);
             X = [ones(obj.ws-1,1),residual(1:obj.ws-1)];
             [b ,~ , ~ ,~ , ~] = regress(Y,X);
-            halfLife = -log(b(2))*256;
-            obj.signalParameters(stock1,stock2,dateLocation,1,1,5) = halfLife;
+            if b(2) > 0
+                lambda = -log(b(2));
+                halfLife = log(2)/lambda;
+            else
+                halfLife = 0;
+            end
+            obj.signalParameters(stock1,stock2,dateLocation,1,1,5) = halfLife;  
             %calculate expeted return
             tradingCost = obj.forwardPrices(dateLocation,stock1)+abs(beta)*obj.forwardPrices(dateLocation,stock2);
-            expectedReturn = abs(dislocation)/(2*tradingCost)/(halfLife/256);
+            if halfLife > 0
+                expectedReturn = dislocation/(2*tradingCost)/(halfLife/256);
+            else
+                expectedReturn = 0;
+            end
             obj.signalParameters(stock1,stock2,dateLocation,1,1,4) = expectedReturn;
             %calculate entry point boundary
-            boundary = alpha + 2*std(residual);
-            obj.signalParameters(stock1,stock2,dateLocation,1,1,6) = boundary;
+            sigma = std(residual);
+            obj.signalParameters(stock1,stock2,dateLocation,1,1,6) = sigma;
+            obj.signalParameters(stock1,stock2,dateLocation,1,1,7) = alpha;
+            obj.signalParameters(stock1,stock2,dateLocation,1,1,8) = beta;
+            %calculate open condition
+            %halfLife<1,不开仓；dislocation/cost<0.04%,不开仓；在2sigma和2.5sigma之间开仓
+            if dislocation/tradingCost <= 0.0004
+                obj.signalParameters(stock1,stock2,dateLocation,1,1,9) = 0;
+            elseif zScore >= 2
+                obj.signalParameters(stock1,stock2,dateLocation,1,1,9) = 1;
+            else
+                obj.signalParameters(stock1,stock2,dateLocation,1,1,9) = 0;
+            end
         end
+        
         
         %calculate all the pairs parameters
         function obj = generateSignals(obj,dateCode)
@@ -105,7 +129,9 @@ classdef PairTradingSignal < handle
                     X = obj.forwardPrices(dateLocation-obj.wr+1:dateLocation,stock2);
                     YNaNNum = sum(isnan(Y));
                     XNaNNum = sum(isnan(X));
-                    if YNaNNum+XNaNNum >= 1 || max(Y)-min(Y) == 0 || max(X)-min(X) == 0
+                    Y_stat = tabulate(Y);
+                    X_stat = tabulate(X);
+                    if YNaNNum+XNaNNum >= 1 || max(Y_stat(:,3)) > 20 || max(X_stat(:,3)) > 20
                         obj.regressionAlphaHistory(stock1,stock2,dateLocation) = NaN;
                         obj.regressionBetaHistory(stock1,stock2,dateLocation) = NaN;
                     else
@@ -116,22 +142,38 @@ classdef PairTradingSignal < handle
                     alphaNaNNum = sum(isnan(obj.regressionAlphaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation)));
                     betaNaNNum = sum(isnan(obj.regressionBetaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation)));
                     %if there are NaNs in regression history, then this pair is not valid and set all the parameters 0.
-                    if alphaNaNNum+betaNaNNum >= 1
-                        obj.signalParameters(stock1,stock2,dateLocation,1,1,:) = zeros(8,1);
+                    stockPrice1 = obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock1);
+                    stockPrice2 = obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock2);
+                    stock_stat1 = tabulate(stockPrice1);
+                    stock_stat2 = tabulate(stockPrice2);
+                    %如果股价超过30%对ws窗口期内不变，认为数据无效；
+                    if alphaNaNNum+betaNaNNum >= 1 || max(stock_stat1(:,3)) > 30 || max(stock_stat2(:,3)) > 30
+                        obj.signalParameters(stock1,stock2,dateLocation,1,1,:) = zeros(9,1);
                     else
-                        averageAlpha = mean(obj.regressionAlphaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation));
-                        averageBeta = mean(obj.regressionBetaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation));
-                        residual = obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock1) - averageAlpha - averageBeta*obj.forwardPrices(dateLocation - obj.ws + 1:dateLocation,stock2);
-                        validity = adftest(residual);
-                        %if residual series is staionary, then calculate and store parameters 
-                        if validity == 1
-                            obj.signalParameters(stock1,stock2,dateLocation,1,1,1) = validity;
-                            obj.signalParameters(stock1,stock2,dateLocation,1,1,7) = averageAlpha;
-                            obj.signalParameters(stock1,stock2,dateLocation,1,1,8) = averageBeta;
-                            obj.calculateParameters(stock1,stock2,dateCode,averageAlpha,averageBeta,residual);
-                        %if residual series is not stationary, then all the parameters are 0
+                        alphaSeries = zeros(obj.ws,1);
+                        betaSeries = zeros(obj.ws,1);
+                        alphaSeries(:,1) = obj.regressionAlphaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation);
+                        betaSeries(:,1) = obj.regressionBetaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation);
+                        %对beta和alpha的stability检验，方法为对前1/3和后1/3对序列做wilconx秩和检验
+                        wilNum = floor(obj.ws/2);
+                        [~,h_alpha] = ranksum(alphaSeries(1:wilNum,1),alphaSeries(obj.ws-wilNum+1:obj.ws,1));
+                        [~,h_beta] = ranksum(betaSeries(1:wilNum,1),betaSeries(obj.ws-wilNum+1:obj.ws,1));
+                        %如果alpha或beta波动较大，则参数全部传为0
+                        if (h_alpha == 1) || (h_beta == 1)
+                            obj.signalParameters(stock1,stock2,dateLocation,1,1,:) = zeros(9,1);
                         else
-                            obj.signalParameters(stock1,stock2,dateLocation,1,1,:) = zeros(8,1);
+                            averageAlpha = mean(obj.regressionAlphaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation));
+                            averageBeta = mean(obj.regressionBetaHistory(stock1,stock2,dateLocation - obj.ws + 1:dateLocation));
+                            residual = stockPrice1 - averageAlpha - averageBeta*stockPrice2;
+                            validity = adftest(residual);
+                            %if residual series is staionary, then calculate and store parameters 
+                            if validity == 1
+                                obj.signalParameters(stock1,stock2,dateLocation,1,1,1) = validity;
+                                obj.calculateParameters(stock1,stock2,dateCode,averageAlpha,averageBeta,residual);
+                            %if residual series is not stationary, then all the parameters are 0
+                            else
+                                obj.signalParameters(stock1,stock2,dateLocation,1,1,:) = zeros(9,1);
+                            end
                         end
                     end
                 end
