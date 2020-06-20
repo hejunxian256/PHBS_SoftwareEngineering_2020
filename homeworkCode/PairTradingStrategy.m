@@ -20,6 +20,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
         noValidation;
         cutLossCounter;
         stopWinCounter ;
+        exchangeStopCounter;
         currPairList;
     end
     
@@ -35,6 +36,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             obj.noValidation=0;
             obj.cutLossCounter=0;
             obj.stopWinCounter =0;
+            obj.exchangeStopCounter=0;
             obj.currPairList = cell(0);
         end
     
@@ -58,6 +60,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                obj.cutLossRecord=obj.signals.signalParameters( : , : , 1 , 1 , 1 , 1 )*0-1; %记录该pair是否在止损线定期内，是则大于0
                obj.openCounter=obj.signals.signalParameters( : , : , 1 , 1 , 1 , 1 )*0; %记录每个pair总的开仓次数
                obj.noValidation = obj.signals.signalParameters( : , : , 1 , 1 , 1 , 1 )*0;%记录每个pair因为协整关系失效而关仓总次数
+               obj.exchangeStopCounter = obj.signals.signalParameters( : , : , 1 , 1 , 1 , 1 )*0;%记录每个pair因为换仓而关仓总次数
 
             end
 
@@ -82,6 +85,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                 xlswrite('stopWinCounter.xls',obj.stopWinCounter);
                 xlswrite('openCounter.xls',obj.openCounter);
                 xlswrite('noValidation.xls',obj.noValidation);
+                xlswrite('exchangeStopCounter.xls',obj.exchangeStopCounter);
             end
         end
         
@@ -93,8 +97,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             validityIndex = find(ismember(obj.signals.propertyNameList, 'validity'));
             currentVal = obj.signals.signalParameters(:,:,end,1,1,validityIndex);
             aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
-            dateLoc = find( [obj.signals.dateList{:,1}]== currDate );
-           % cashAvailable = obj.getCashAvailable('stockAccount');
+
             longwindTicker={};
             longQuant = [];
             shortwindTicker = {};
@@ -107,30 +110,29 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                 sign=false;%the signal whether to close the position
                 
                 if (obj.currPairList{1,i}.PnL<-0.05) %止损平仓         
-                    obj.lossCounter(x1, x2) =obj.lossCounter(x1, x2)+ 1;
                     obj.cutLossCounter(x1, x2) =obj.cutLossCounter(x1, x2)+ 1;
                     obj.cutLossRecord(x1, x2) =20;%20日内不开此pair %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                     sign=true;                  
                 end
                 
-                if (currentVal(x1, x2)<1)% 协助不满足，平仓
-                    if (obj.currPairList{1,i}.PnL<0)
-                        obj.lossCounter(x1, x2) =obj.lossCounter(x1, x2)+ 1;
-                    else 
-                        obj.winCounter(x1, x2) =obj.winCounter(x1, x2)+ 1;
-                    end
-                    obj.noValidation(x1, x2) =obj.noValidation(x1, x2)+ 1;
+                if (currentVal(x1, x2)<1)&&(obj.currPairList{1,i}.PnL>-0.05)% 协助不满足，平仓
                     sign = true;
-                    obj.cutLossRecord(x1, x2) =20;
+                    obj.cutLossRecord(x1, x2) =20;%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                    obj.noValidation(x1, x2) =obj.noValidation(x1, x2)+ 1;
                 end
                 
-                if ( currentZscore(x1,x2)*obj.currPairList{1,i}.openZScore<0 )%止盈            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                    obj.winCounter(x1, x2) =obj.winCounter(x1, x2)+ 1;
+                if ( currentZscore(x1,x2)*obj.currPairList{1,i}.openZScore<0 )&&(currentVal(x1, x2)>0)%止盈            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%;
                     obj.stopWinCounter(x1, x2) = obj.stopWinCounter(x1, x2)+ 1;
                     sign=true;
                 end
                 
                 if sign==true % close the position
+                    if (obj.currPairList{1,i}.PnL<0)
+                        obj.lossCounter(x1, x2) =obj.lossCounter(x1, x2)+ 1;
+                    else 
+                        obj.winCounter(x1, x2) =obj.winCounter(x1, x2)+ 1;
+                    end
+                    
                     obj.existPair(x1,x2)=0; %平仓后把这个位置设定为0
                     stock1=obj.currPairList{1,i}.stock1;
                     stock2=obj.currPairList{1,i}.stock2;
@@ -253,7 +255,8 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
                         listLongth = listLongth +1;
                     else
                         if newStruct.expectReturn > obj.currPairList{1,1}.expectReturn
-                            [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.closePair(obj.currPairList{1,1},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate);%这里现金增加了
+                            [longwindTicker,longQuant,shortwindTicker,shortQuant] = obj.closePair(obj.currPairList{1,1},longwindTicker,longQuant,shortwindTicker,shortQuant,currDate);
+                            obj.exchangeStopCounter(x,y) = obj.exchangeStopCounter(x,y)+1;
                             waitLong{1,length(waitLong)+1} = newStruct;%用来存放将要open的pair
                             %因为这个时候listlongth=10，不需要增加listLongth,仅仅是替换
                         end
@@ -310,7 +313,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             dateLoc = find( [obj.signals.dateList{:,1}]== currDate );
             x1 = find(ismember(obj.signals.stockLocation, newStruct.stock1));
             x2 = find(ismember(obj.signals.stockLocation, newStruct.stock2));
-            obj.openCounter(x1,x2)=1;
+            obj.openCounter(x1,x2)=obj.openCounter(x1,x2)+1;
             obj.existPair(x1,x2)=1;
             windTickers1 = aggregatedDataStruct.stock.description.tickers.windTicker(newStruct.stock1);
             windTickers2 = aggregatedDataStruct.stock.description.tickers.windTicker(newStruct.stock2);%wind股票代码
@@ -370,9 +373,7 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
              x1 = find(ismember(obj.signals.stockLocation, closeStruct.stock1));
              x2 = find(ismember(obj.signals.stockLocation, closeStruct.stock2));
              obj.existPair(x1,x2)=0;
-             opendateLoc = find([obj.signals.dateList{:,1}]== closeStruct.openDate) ;%开仓时间
              aggregatedDataStruct = obj.marketData.aggregatedDataStruct;
-             [~, dateLoc] = ismember(currDate, aggregatedDataStruct.sharedInformation.allDates);
 
             % 沈廷威2020/06/05:每次平仓时都要对平仓计数器winCounter或lossCounter进行+1操作，请判断决定平仓时，第二天的卖出价格相对于开仓成本到底是收益还是损失。此处仅为统计使用，故可使用未来数据
             % 这部分可以按照ppt中显示过的，新增一个cell对象，对在每次平仓时仅存储平仓的股票，开仓日期，平仓日期，平仓原因等信息，后续集中对这个数据进行统计分析。可细化。
@@ -380,21 +381,6 @@ classdef PairTradingStrategy < mclasses.strategy.LFBaseStrategy
             windTickers1 = aggregatedDataStruct.stock.description.tickers.windTicker(closeStruct.stock1);
             windTickers2 = aggregatedDataStruct.stock.description.tickers.windTicker(closeStruct.stock2);%得到wind股票代码
 
-            if  closeStruct.stock1Position<0 %如果原来是空头，平仓时候价格按照开仓价格算
-                realPrice1=aggregatedDataStruct.stock.properties.open(opendateLoc, closeStruct.stock1);
-            else
-                realPrice1 = aggregatedDataStruct.stock.properties.close(dateLoc, closeStruct.stock1);%否则用当前价格计算平仓价格
-            end
-            % 沈廷威2020/06/05: dataLoc非成员变量，无法直接访问，请传参或者新增成员变量。
-            % 李方闻2020/06/06: 已经修改
-%             if  closeStruct.stock2Position<0 %如果原来是空头，平仓时候价格按照开仓价格算
-%                 realPrice2=aggregatedDataStruct.stock.properties.open(opendateLoc, closeStruct.stock2);
-%             else
-%                  realPrice2 = aggregatedDataStruct.stock.properties.close(dateLoc, closeStruct.stock2);%真实价格用来计算卖出现金
-%             end
-%             cashAvailable = cashAvailable+(abs(closeStruct.stock1Position)*realPrice1+abs(closeStruct.stock2Position)*realPrice2)*(1-2/10000);%增加可用现金
-%             % 沈廷威2020/06/04:这部分涉及到未来数据，并作为交易指导，不允许
-%             % 李方闻2020/06/06:已经修改
             obj.currPairList = {obj.currPairList{2:end}} ; %删除第一个
             
             if closeStruct.PnL>0
